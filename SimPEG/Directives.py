@@ -507,3 +507,22 @@ class Update_Wj(InversionDirective):
             JtJdiag = JtJdiag / max(JtJdiag)
 
             self.reg.wght = JtJdiag
+
+class Update_DC_Wr(InversionDirective):
+    """
+        Update the sensitivity wegithing for the DC2D problem
+    """
+    def initialize(self):
+
+        wr = np.sum(self.prob.getJ(self.invProb.model)**2., axis=0)
+        wr = (wr/wr.max())**0.5
+        print(wr.min(), wr.max())
+        self.reg.cell_weights = wr
+
+    def endIter(self):
+
+        wr = np.sum(self.prob.getJ(self.invProb.model)**2., axis=0)
+        wr = (wr/wr.max())**0.5
+        print(wr.min(), wr.max())
+        self.reg.cell_weights = wr
+

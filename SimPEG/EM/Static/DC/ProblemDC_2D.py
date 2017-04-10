@@ -27,8 +27,9 @@ class BaseDCProblem_2D(BaseEMProblem):
     def fields(self, m):
         if m is not None:
             self.model = m        
-        if self.Ainv[0] is not None:
-            for i in range(self.nky):
+        
+        for i in range(self.nky):
+            if self.Ainv[i] is not None:
                 self.Ainv[i].clean()
 
         f = self.fieldsPair(self.mesh, self.survey)

@@ -367,6 +367,8 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
     else:
         fid.write('! ' + formatType + ' FORMAT\n')
 
+    fid.close()
+    
     count = 0
 
     for ii in range(DCsurvey.nSrc):
@@ -386,6 +388,7 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
         M = rx[0]
         N = rx[1]
 
+        
         # Adapt source-receiver location for dim and surveyType
         if dim == '2D':
 
@@ -402,14 +405,16 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
 
                 M = M[:, 0]
                 N = N[:, 0]
-
+                
+                fid = open(fileName, 'ab')
                 np.savetxt(fid, np.c_[A, B, M, N,
                                       DCsurvey.dobs[count:count+nD],
                                       DCsurvey.std[count:count+nD]],
                                       delimiter=' ', newline='\n')
-
+                fid.close()
+                
             else:
-
+                fid = open(fileName, 'a')
                 if formatType == 'SURFACE':
 
                     fid.writelines("%f " % ii for ii in Utils.mkvc(tx[0, :]))
@@ -430,6 +435,9 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
                     N[:, 1::2] = -N[:, 1::2]
 
                 fid.write('%i\n'% nD)
+                fid.close()
+                
+                fid = open(fileName, 'ab')
                 np.savetxt(fid, np.c_[M, N, DCsurvey.dobs[count:count+nD], DCsurvey.std[count:count+nD] ], delimiter=' ', newline='\n')
 
         if dim == '3D':
@@ -445,9 +453,13 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
                 fid.writelines("%e " % ii for ii in Utils.mkvc(tx.T))
 
             fid.write('%i\n'% nD)
+            
+            fid.close()
+                
+            fid = open(fileName, 'ab')
             np.savetxt(fid, np.c_[M, N, DCsurvey.dobs[count:count+nD], DCsurvey.std[count:count+nD] ], fmt='%e', delimiter=' ', newline='\n')
             fid.write('\n')
-
+            fid.close()
         count += nD
 
     fid.close()
@@ -620,7 +632,7 @@ def readUBC_DC2DModel(fileName):
     obsfile = np.genfromtxt(fileName, delimiter=' \n',
                             dtype=np.str, comments='!')
 
-    dim = np.array(obsfile[0].split(), dtype=float)
+    dim = np.array(obsfile[0].split(), dtype=int)
 
     temp = np.array(obsfile[1].split(), dtype=float)
 
