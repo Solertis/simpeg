@@ -5,7 +5,9 @@ from __future__ import unicode_literals
 
 from SimPEG import Utils
 from SimPEG.EM.Base import BaseEMProblem
-from SimPEG.EM.Static.DC.FieldsDC_2D import Fields_ky, Fields_ky_CC, Fields_ky_N
+from SimPEG.EM.Static.DC.FieldsDC_2D import (
+    Fields_ky, Fields_ky_CC, Fields_ky_N
+    )
 from SimPEG.EM.Static.DC import BaseDCProblem_2D
 import numpy as np
 from SimPEG.Utils import Zero
@@ -27,7 +29,7 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
     Props.Reciprocal(sigma, rho)
 
     eta, etaMap, etaDeriv = Props.Invertible(
-        "Electrical Chargeability"
+        "Electrical Chargeability (V/V)"
     )
 
     surveyPair = Survey
@@ -35,15 +37,16 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
     J = None
     fswitch = False
     sign = None
+    f = None
 
-    def fieldsdc(self, m):
-        if m is not None:
-            self.model = m        
+    def fieldsdc(self):
+        if self.verbose:
+            print (">> Compute DC fields")
         if self.Ainv[0] is not None:
             for i in range(self.nky):
                 self.Ainv[i].clean()
 
-        f = self.fieldsPair(self.mesh, self.survey)
+        self.f = self.fieldsPair(self.mesh, self.survey)
         Srcs = self.survey.srcList
         for iky in range(self.nky):
             ky = self.kys[iky]
@@ -51,22 +54,23 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
             self.Ainv[iky] = self.Solver(A, **self.solverOpts)
             RHS = self.getRHS(ky)
             u = self.Ainv[iky] * RHS
-            f[Srcs, self._solutionType, iky] = u
-        return f
+            self.f[Srcs, self._solutionType, iky] = u
 
     def fields(self, m):
         # This is stupid..., but not sure how I can change InvProblem
-        # where calling self.fields        
+        # where calling self.fields
         return None
 
-    def getJ(self, m, f=None):
+    def getJ(self, f=None):
         """
             Generate Full sensitivity matrix
         """
-        if f is None:
-            f = self.fieldsdc(m)
 
-        self.model = m
+        if self.verbose:
+            print (">> Compute Sensitivity matrix")
+
+        if self.f is None:
+            self.fieldsdc()
 
         Jt = []
 
@@ -77,17 +81,17 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
         y = 0.
         for src in self.survey.srcList:
             for rx in src.rxList:
-                Jtv_temp1 = np.zeros((m.size, rx.nD), dtype=float)
-                Jtv_temp0 = np.zeros((m.size, rx.nD), dtype=float)
-                Jtv = np.zeros((m.size, rx.nD), dtype=float)
+                Jtv_temp1 = np.zeros((self.model.size, rx.nD), dtype=float)
+                Jtv_temp0 = np.zeros((self.model.size, rx.nD), dtype=float)
+                Jtv = np.zeros((self.model.size, rx.nD), dtype=float)
                 # TODO: this loop is pretty slow .. (Parellize)
                 for iky in range(self.nky):
-                    u_src = f[src, self._solutionType, iky]
+                    u_src = self.f[src, self._solutionType, iky]
                     ky = self.kys[iky]
                     AT = self.getA(ky)
 
                     # wrt f, need possibility wrt m
-                    P = rx.getP(self.mesh, rx.projGLoc(f)).toarray()
+                    P = rx.getP(self.mesh, rx.projGLoc(self.f)).toarray()
 
                     ATinvdf_duT = self.Ainv[iky] * (P.T)
 
@@ -95,7 +99,7 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
                                             adjoint=True)
                     Jtv_temp1 = 1./np.pi*(-dA_dmT)
                     if rx.nD == 1:
-                        Jtv_temp1 = Jtv_temp1.reshape([-1,1])
+                        Jtv_temp1 = Jtv_temp1.reshape([-1, 1])
 
                     # Trapezoidal intergration
                     if iky == 0:
@@ -105,7 +109,6 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
                         Jtv += Jtv_temp1*dky[iky]/2.*np.cos(ky*y)
                         Jtv += Jtv_temp0*dky[iky]/2.*np.cos(ky*y)
                     Jtv_temp0 = Jtv_temp1.copy()
-
                 Jt.append(Jtv)
 
         return np.hstack(Jt).T
@@ -113,16 +116,16 @@ class BaseIPProblem_2D(BaseDCProblem_2D):
     def Jvec(self, m, v, f=None):
         self.model = m
         if self.fswitch == False:
-            f = self.fieldsdc(m)
-            self.J = self.getJ(m, f=f)
+            f = self.fieldsdc()
+            self.J = self.getJ(f=f)
             self.fswitch = True
         return self.sign * self.J.dot(v)
 
     def Jtvec(self, m, v, f=None):
         self.model = m
         if self.fswitch == False:
-            f = self.fieldsdc(m)
-            self.J = self.getJ(m, f=f)
+            f = self.fieldsdc()
+            self.J = self.getJ(f=f)
             self.fswitch = True
         Jtvec = self.J.T.dot(v)
         return self.sign * Jtvec
@@ -366,8 +369,7 @@ class Problem2D_N(BaseIPProblem_2D):
     sign = -1.
 
     def __init__(self, mesh, **kwargs):
-        BaseDCProblem_2D.__init__(self, mesh, **kwargs)
-        # self.setBC()
+        BaseIPProblem_2D.__init__(self, mesh, **kwargs)
 
     def getA(self, ky):
         """
@@ -389,6 +391,8 @@ class Problem2D_N(BaseIPProblem_2D):
         A[0, 0] = A[0, 0] + 1.
         return A
 
+    @Utils.count
+    @Utils.timeIt
     def getADeriv(self, ky, u, v, adjoint=False):
 
         MeSigma = self.MeSigma
