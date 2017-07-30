@@ -553,10 +553,15 @@ class Minimize(object):
             :rtype: None
             :return: None
         """
+        # self.parent.dmisfit.prob.Ainv.clean()
+        # print("Cleaned Ainv.")
+
         # store old values
         self.f_last = self.f
         self.x_last, self.xc = self.xc, xt
         self.iter += 1
+
+
         if self.debug:
             self.printDone()
 

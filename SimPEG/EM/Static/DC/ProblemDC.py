@@ -38,17 +38,14 @@ class BaseDCProblem(BaseEMProblem):
         Srcs = self.survey.srcList
         f[Srcs, self._solutionType] = u
 
-        if np.all([self.storeJ, m is not None]):
-            self.getJ(m, f)
+        # if np.all([self.storeJ, m is not None, Jmat is None]):
+        #     self.getJ(m, f)
 
         return f
 
-    def getJ(self, m, f=None):
+    def getJ(self, m, f):
 
         print("Calculating J and storing")
-        if f is None:
-            f = self.fields(m)
-
         self.model = m
 
         self.Jmat = []
@@ -78,7 +75,7 @@ class BaseDCProblem(BaseEMProblem):
 
     def Jvec(self, m, v, f=None):
 
-        if self.storeJ:
+        if np.all([self.storeJ, self.Jmat is not None]):
             return Utils.mkvc(np.dot(self.Jmat, v))
 
         if f is None:
@@ -107,7 +104,7 @@ class BaseDCProblem(BaseEMProblem):
 
     def Jtvec(self, m, v, f=None):
 
-        if self.storeJ:
+        if np.all([self.storeJ, self.Jmat is not None]):
             return Utils.mkvc(np.dot(self.Jmat.T, v))
 
         if f is None:

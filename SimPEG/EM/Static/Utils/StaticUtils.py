@@ -367,8 +367,6 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
     else:
         fid.write('! ' + formatType + ' FORMAT\n')
 
-    fid.close()
-    
     count = 0
 
     for ii in range(DCsurvey.nSrc):
@@ -388,7 +386,6 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
         M = rx[0]
         N = rx[1]
 
-        
         # Adapt source-receiver location for dim and surveyType
         if dim == '2D':
 
@@ -405,16 +402,14 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
 
                 M = M[:, 0]
                 N = N[:, 0]
-                
-                fid = open(fileName, 'ab')
+
                 np.savetxt(fid, np.c_[A, B, M, N,
                                       DCsurvey.dobs[count:count+nD],
                                       DCsurvey.std[count:count+nD]],
                                       delimiter=' ', newline='\n')
-                fid.close()
-                
+
             else:
-                fid = open(fileName, 'a')
+
                 if formatType == 'SURFACE':
 
                     fid.writelines("%f " % ii for ii in Utils.mkvc(tx[0, :]))
@@ -435,9 +430,6 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
                     N[:, 1::2] = -N[:, 1::2]
 
                 fid.write('%i\n'% nD)
-                fid.close()
-                
-                fid = open(fileName, 'ab')
                 np.savetxt(fid, np.c_[M, N, DCsurvey.dobs[count:count+nD], DCsurvey.std[count:count+nD] ], delimiter=' ', newline='\n')
 
         if dim == '3D':
@@ -453,13 +445,9 @@ def writeUBC_DCobs(fileName, DCsurvey, dim, formatType, iptype=0):
                 fid.writelines("%e " % ii for ii in Utils.mkvc(tx.T))
 
             fid.write('%i\n'% nD)
-            
-            fid.close()
-                
-            fid = open(fileName, 'ab')
             np.savetxt(fid, np.c_[M, N, DCsurvey.dobs[count:count+nD], DCsurvey.std[count:count+nD] ], fmt='%e', delimiter=' ', newline='\n')
             fid.write('\n')
-            fid.close()
+
         count += nD
 
     fid.close()
@@ -632,7 +620,7 @@ def readUBC_DC2DModel(fileName):
     obsfile = np.genfromtxt(fileName, delimiter=' \n',
                             dtype=np.str, comments='!')
 
-    dim = np.array(obsfile[0].split(), dtype=int)
+    dim = np.array(obsfile[0].split(), dtype=float)
 
     temp = np.array(obsfile[1].split(), dtype=float)
 
@@ -969,9 +957,11 @@ def gettopoCC(mesh, actind):
         topo = np.zeros(ZC.shape[0])
         topoCC = np.zeros(ZC.shape[0])
         for i in range(ZC.shape[0]):
-            ind = np.argmax(ZC[i, :][~ACTIND[i, :]])
-            topo[i] = ZC[i, :][~ACTIND[i, :]].max() + mesh.hz[~ACTIND[i, :]][ind]*0.5
-            topoCC[i] = ZC[i, :][~ACTIND[i, :]].max()
+            ind = np.argmax(ZC[i, :][ACTIND[i, :]])
+            topo[i] = (
+                ZC[i, :][ACTIND[i, :]].max() + mesh.hz[ACTIND[i, :]][ind]*0.5
+                )
+            topoCC[i] = ZC[i, :][ACTIND[i, :]].max()
 
         return mesh2D, topoCC
 
@@ -984,21 +974,23 @@ def gettopoCC(mesh, actind):
         topo = np.zeros(YC.shape[0])
         topoCC = np.zeros(YC.shape[0])
         for i in range(YC.shape[0]):
-            ind = np.argmax(YC[i, :][~ACTIND[i, :]])
-            topo[i] = YC[i, :][~ACTIND[i, :]].max() + mesh.hy[~ACTIND[i, :]][ind]*0.5
-            topoCC[i] = YC[i, :][~ACTIND[i, :]].max()
+            ind = np.argmax(YC[i, :][ACTIND[i, :]])
+            topo[i] = (
+                YC[i, :][ACTIND[i, :]].max() + mesh.hy[ACTIND[i, :]][ind]*0.5
+                )
+            topoCC[i] = YC[i, :][ACTIND[i, :]].max()
 
         return mesh1D, topoCC
 
 
-def drapeTopotoLoc(mesh, topo, pts, actind=None):
+def drapeTopotoLoc(mesh, pts, actind=None, topo=None):
     """
         Drape location right below (cell center) the topography
     """
     if mesh.dim == 2:
         if pts.ndim > 1:
             raise Exception("pts should be 1d array")
-    elif mesh.dim ==3:
+    elif mesh.dim == 3:
         if pts.shape[1] == 3:
             raise Exception("shape of pts should be (x,3)")
     else:
@@ -1006,7 +998,7 @@ def drapeTopotoLoc(mesh, topo, pts, actind=None):
     if actind is None:
         actind = Utils.surface2ind_topo(mesh, topo)
 
-    meshtemp, topoCC = gettopoCC(mesh, ~actind)
+    meshtemp, topoCC = gettopoCC(mesh, actind)
     inds = Utils.closestPoints(meshtemp, pts)
     out = np.c_[pts, topoCC[inds]]
     return out

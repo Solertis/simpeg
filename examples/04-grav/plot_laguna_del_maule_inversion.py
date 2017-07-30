@@ -13,6 +13,7 @@ Craig Miller
 """
 import os
 import shutil
+import tarfile
 import SimPEG.PF as PF
 from SimPEG import Maps, Regularization, Optimization, DataMisfit,\
                    InvProblem, Directives, Inversion
@@ -22,17 +23,30 @@ import numpy as np
 
 
 def run(plotIt=True, cleanAfterRun=True):
+    """
+        PF: Gravity: Laguna del Maule Bouguer Gravity
+        =============================================
+
+        This notebook illustrates the SimPEG code used to invert Bouguer
+        gravity data collected at Laguna del Maule volcanic field, Chile.
+        Refer to Miller et al 2016 EPSL for full details.
+
+        We run the inversion in two steps.  Firstly creating a L2 model and
+        then applying an Lp norm to produce a compact model.
+        Craig Miller
+    """
 
     # Start by downloading files from the remote repository
-    url = "https://storage.googleapis.com/simpeg/Chile_GRAV_4_Miller/"
-    cloudfiles = [
-        'LdM_grav_obs.grv', 'LdM_mesh.mesh',
-        'LdM_topo.topo', 'LdM_input_file.inp'
-    ]
+    # directory where the downloaded files are
 
-    # Download to Downloads/SimPEGtemp
-    basePath = os.path.expanduser('~/Downloads/simpegtemp')
-    download([url+f for f in cloudfiles], folder=basePath, overwrite=True)
+    url = "https://storage.googleapis.com/simpeg/Chile_GRAV_4_Miller/Chile_GRAV_4_Miller.tar.gz"
+    downloads = download(url, overwrite=True)
+    basePath = downloads.split(".")[0]
+
+    # unzip the tarfile
+    tar = tarfile.open(downloads, "r")
+    tar.extractall()
+    tar.close()
 
     input_file = basePath + os.path.sep + 'LdM_input_file.inp'
     # %% User input
@@ -99,6 +113,9 @@ def run(plotIt=True, cleanAfterRun=True):
     reg.mref = driver.mref[dynamic]
     reg.cell_weights = wr * mesh.vol[active]
     reg.norms = driver.lpnorms
+    if driver.eps is not None:
+        reg.eps_p = driver.eps[0]
+        reg.eps_q = driver.eps[1]
 
     # Specify how the optimization will proceed
     opt = Optimization.ProjectedGNCG(maxIter=150, lower=driver.bounds[0],
@@ -122,17 +139,18 @@ def run(plotIt=True, cleanAfterRun=True):
                                   minGNiter=5)
 
     # Preconditioning refreshing for each IRLS iteration
-    update_Jacobi = Directives.Update_lin_PreCond()
+    update_Jacobi = Directives.UpdatePreCond()
 
     # Create combined the L2 and Lp problem
     inv = Inversion.BaseInversion(invProb,
-                                  directiveList=[IRLS, update_Jacobi, betaest])
+                                  directiveList=[betaest, IRLS, update_Jacobi])
 
     # %%
     # Run L2 and Lp inversion
     mrec = inv.run(mstart)
 
     if cleanAfterRun:
+        os.remove(downloads)
         shutil.rmtree(basePath)
 
     # %%
@@ -144,7 +162,7 @@ def run(plotIt=True, cleanAfterRun=True):
         # Write output model and data files and print misft stats.
 
         # reconstructing l2 model mesh with air cells and active dynamic cells
-        L2out = activeMap * IRLS.l2model
+        L2out = activeMap * invProb.l2model
 
         # reconstructing lp model mesh with air cells and active dynamic cells
         Lpout = activeMap*mrec
