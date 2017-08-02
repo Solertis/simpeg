@@ -67,7 +67,7 @@ class BaseDCProblem(BaseEMProblem):
                 du_dmT = -dA_dmT + dRHS_dmT
                 Jt = (df_dmT + du_dmT).astype(float)
 
-                self.Jmat.append(Jt)
+                self.Jmat.append(np.vstack(Jt))
 
         self.Jmat = np.hstack(self.Jmat).T
 
