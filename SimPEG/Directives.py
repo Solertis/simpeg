@@ -979,6 +979,7 @@ class Update_DC_Wr(InversionDirective):
                 reg.cell_weights = reg.mapping * wr
                 # reg.mref = m
 
+        # self.opt.approxHinv = None
         JtJdiag = np.sum((self.dmisfit.W * Jmat)**2., axis=0)
 
         regDiag = []
@@ -996,16 +997,17 @@ class Update_DC_Wr(InversionDirective):
 
         m = self.invProb.model
         Jmat = self.prob[0].getJ(m, self.prob[0].fields(m))
+
+        wr = np.sum((Jmat)**2., axis=0)**0.5
+        wr = wr/wr.max()
         if self.wrType == 'distanceW':
-            wr = np.sum((Jmat)**2., axis=0)**0.5
-            wr = wr/wr.max()
             for reg in self.reg.objfcts:
                 reg.cell_weights = reg.mapping * wr
 
         if self.changeMref:
 
             # mref = np.median(m)
-            mref = np.sum(self.reg.objfcts[0].cell_weights*m)/np.sum(self.reg.objfcts[0].cell_weights)
+            mref = np.sum(wr*m)/np.sum(wr)
             # print(self.reg.objfcts[0].cell_weights.min())
 
             print('Updating mref:' + str(np.exp(mref)) + 'S/m')
@@ -1013,6 +1015,7 @@ class Update_DC_Wr(InversionDirective):
             for reg in self.reg.objfcts:
                 reg.mref = np.ones_like(m)*mref
 
+        # self.opt.approxHinv = None
         JtJdiag = np.sum((self.dmisfit.W * Jmat)**2., axis=0)
 
         regDiag = []
