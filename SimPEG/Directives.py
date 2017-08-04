@@ -441,7 +441,7 @@ class Update_IRLS(InversionDirective):
     coolingRate = 1
     ComboRegFun = False
     ComboMisfitFun = False
-
+    scale_m = False
     updateBeta = True
 
     mode = 1
@@ -486,24 +486,22 @@ class Update_IRLS(InversionDirective):
 
     def endIter(self):
 
+                # Adjust scales for MVI-S
+        # if self.ComboMisfitFun:
+        if self.scale_m:
+            self.regScale()
         # Update the model used by the regularization
+        phi_m_last = []
         for reg in self.reg.objfcts:
             reg.model = self.invProb.model
-
-        # Adjust scales for MVI-S
-        # if self.ComboMisfitFun:
-        for prob in self.prob:
-            if isinstance(prob, Magnetics.MagneticVector):
-                if prob.coordinate_system == 'spherical':
-                    self.regScale()
+            phi_m_last += [reg(self.invProb.model)]
 
         # After reaching target misfit with l2-norm, switch to IRLS (mode:2)
-        if np.all([self.invProb.phi_d < self.target, self.mode == 1]):
-            print("Convergence with smooth l2-norm regularization: Start IRLS steps...")
+        if np.all([self.invProb.phi_d < self.start,
+                   self.mode == 1]):
+            print("Reached starting chifact with l2-norm regularization: Start IRLS steps...")
 
             self.mode = 2
-            self.coolingFactor = 1.
-            self.coolingRate = 1
             self.iterStart = self.opt.iter
             self.phi_d_last = self.invProb.phi_d
             self.invProb.phi_m_last = self.reg(self.invProb.model)
@@ -535,25 +533,21 @@ class Update_IRLS(InversionDirective):
                 print("eps_p: " + str(reg.eps_p) +
                       " eps_q: " + str(reg.eps_q))
 
-        # Beta Schedule
-        if np.all([self.opt.iter > 0, self.opt.iter % self.coolingRate == 0]):
-            if self.debug: print('BetaSchedule is cooling Beta. Iteration: {0:d}'.format(self.opt.iter))
-            self.invProb.beta /= self.coolingFactor
-
         # Only update after GN iterations
-        if np.all([(self.opt.iter-self.iterStart) % self.minGNiter == 0,
-                   self.mode == 2]):
+        if np.all([(self.opt.iter-self.iterStart) % self.minGNiter == 0, self.mode != 1]):
+
 
             # Check for maximum number of IRLS cycles
             if self.IRLSiter == self.maxIRLSiter:
-                print("Reach maximum number of IRLS cycles: {0:d}"
-                      .format(self.maxIRLSiter))
+                print("Reach maximum number of IRLS cycles: {0:d}".format(self.maxIRLSiter))
                 self.opt.stopNextIteration = True
                 return
 
+            # phi_m_last = []
             for reg in self.reg.objfcts:
 
-                # Reset gamma scale
+                # # Reset gamma scale
+                # phi_m_last += [reg(self.invProb.model)]
 
                 for comp in reg.objfcts:
                     comp.gamma = 1.
@@ -574,6 +568,10 @@ class Update_IRLS(InversionDirective):
             # Compute new model objective function value
             phim_new = self.reg(self.invProb.model)
 
+            phi_m_new = []
+            for reg in self.reg.objfcts:
+                phi_m_new += [reg(self.invProb.model)]
+
             # phim_new = self.reg(self.invProb.model)
             self.f_change = np.abs(self.f_old - phim_new) / self.f_old
 
@@ -587,21 +585,34 @@ class Update_IRLS(InversionDirective):
                 self.f_old = phim_new
 
             # Update gamma to scale the regularization between IRLS iterations
-            gamma = self.invProb.phi_m_last / phim_new
-            for reg in self.reg.objfcts:
+
+            for reg, phim_old, phim_now in zip(self.reg.objfcts, phi_m_last, phi_m_new):
+
+                gamma = phim_old / phim_now
 
                 # If comboObj, go down one more level
                 for comp in reg.objfcts:
                     comp.gamma = gamma
 
-            # Check if misfit is within the tolerance, otherwise scale beta
-            val = self.invProb.phi_d / self.target
+        # Beta Schedule
+        if np.all([self.invProb.phi_d < self.target,
+                   self.mode == 2]):
+            print("Target chifact overshooted, adjusting beta ...")
+            self.mode = 3
 
-            if np.all([np.abs(1.-val) > self.beta_tol, self.updateBeta]):
+        if np.all([self.opt.iter > 0, self.opt.iter % self.coolingRate == 0,
+                   self.mode != 3]):
 
-                self.invProb.beta = (self.invProb.beta * self.target /
-                                     self.invProb.phi_d)
+            if self.debug: print('BetaSchedule is cooling Beta. Iteration: {0:d}'.format(self.opt.iter))
+            self.invProb.beta /= self.coolingFactor
 
+        # Check if misfit is within the tolerance, otherwise scale beta
+        if np.all([np.abs(1. - self.invProb.phi_d / self.target) > self.beta_tol,
+                   self.updateBeta,
+                   self.mode == 3]):
+
+            self.invProb.beta = (self.invProb.beta * self.target /
+                                 self.invProb.phi_d)
     def regScale(self):
         """
             Update the scales used by regularization
