@@ -45,7 +45,7 @@ class BaseDCProblem(BaseEMProblem):
 
     def getJ(self, m, f):
 
-        print("Calculating J and storing")
+        # print("Calculating J and storing")
         self.model = m
 
         self.Jmat = []

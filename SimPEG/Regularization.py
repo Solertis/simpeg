@@ -1418,8 +1418,8 @@ class SparseDeriv(BaseSparse):
             r = W * dmdx
 
         else:
-            r = self.W * (self.mapping * (m - self.mref))
-        mD = self.mapping.deriv(m - self.mref)
+            r = self.W * (self.mapping * (m))
+        mD = self.mapping.deriv(m)
         return mD.T * (self.W.T * r)
 
 

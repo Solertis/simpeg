@@ -443,7 +443,7 @@ class Update_IRLS(InversionDirective):
     ComboMisfitFun = False
     scale_m = False
     updateBeta = True
-
+    chifact_start = 1
     mode = 1
 
     @property
@@ -462,6 +462,23 @@ class Update_IRLS(InversionDirective):
     @target.setter
     def target(self, val):
         self._target = val
+
+    @property
+    def start(self):
+        if getattr(self, '_start', None) is None:
+            if isinstance(self.survey, list):
+                self._start = 0
+                for survey in self.survey:
+                    self._start += survey.nD*0.5*self.chifact_start
+
+            else:
+
+                self._start = self.survey.nD*0.5*self.chifact_start
+        return self._start
+
+    @start.setter
+    def start(self, val):
+        self._start = val
 
     def initialize(self):
 
@@ -613,6 +630,7 @@ class Update_IRLS(InversionDirective):
 
             self.invProb.beta = (self.invProb.beta * self.target /
                                  self.invProb.phi_d)
+
     def regScale(self):
         """
             Update the scales used by regularization
