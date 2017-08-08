@@ -1263,13 +1263,13 @@ class BaseSparse(BaseRegularization):
     def stashedR(self, value):
         self._stashedR = value
 
-    # @property
-    # def stashedR(self):
-    #     return self._stashedR
+    @property
+    def stashedR(self):
+        return self._stashedR
 
-    # @stashedR.setter
-    # def stashedR(self, value):
-    #     self._stashedR = value
+    @stashedR.setter
+    def stashedR(self, value):
+        self._stashedR = value
 
     def R(self, f_m):
         # if R is stashed, return that instead
@@ -1368,7 +1368,7 @@ class SparseDeriv(BaseSparse):
             r = W * dmdx
 
         else:
-            r = self.W * (self.mapping * (m - self.mref))
+            r = self.W * (self.mapping * (m))
 
 
         return 0.5 * r.dot(r)
