@@ -1004,9 +1004,9 @@ class Update_DC_Wr(InversionDirective):
 
         if self.wrType == 'distanceW':
             wr = np.sum((Jmat)**2., axis=0)**0.5
-            for reg in self.reg.objfcts:
-                reg.cell_weights = reg.mapping * wr
-                # reg.mref = m
+            wr = wr/wr.max()
+            # for reg in self.reg.objfcts:
+            self.reg.objfcts[0].cell_weights = self.reg.mapping * wr
 
         # self.opt.approxHinv = None
         JtJdiag = np.sum((self.dmisfit.W * Jmat)**2., axis=0)
@@ -1030,8 +1030,8 @@ class Update_DC_Wr(InversionDirective):
         wr = np.sum((Jmat)**2., axis=0)**0.5
         wr = wr/wr.max()
         if self.wrType == 'distanceW':
-            for reg in self.reg.objfcts:
-                reg.cell_weights = reg.mapping * wr
+            # for reg in self.reg.objfcts:
+            self.reg.objfcts[0].cell_weights = self.reg.mapping * wr
 
         if self.changeMref:
 

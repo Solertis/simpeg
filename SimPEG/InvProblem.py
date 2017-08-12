@@ -98,9 +98,9 @@ class BaseInvProblem(Props.BaseSimPEG):
         SimPEG.InvProblem is setting bfgsH0 to the inverse of the eval2Deriv.
         ***Done using same Solver and solverOpts as the problem***"""
                 )
-                self.opt.bfgsH0 = self.dmisfit.prob.Solver(
-                    self.reg.deriv2(self.model), **self.dmisfit.prob.solverOpts
-                )
+                # self.opt.bfgsH0 = self.dmisfit.prob.Solver(
+                #     self.reg.deriv2(self.model), **self.dmisfit.prob.solverOpts
+                # )
             elif isinstance(self.dmisfit, ObjectiveFunction.BaseObjectiveFunction):
                 for objfct in self.dmisfit.objfcts:
                     if isinstance(objfct, DataMisfit.BaseDataMisfit):
