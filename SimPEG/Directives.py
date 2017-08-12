@@ -1011,13 +1011,18 @@ class Update_DC_Wr(InversionDirective):
         # self.opt.approxHinv = None
         JtJdiag = np.sum((self.dmisfit.W * Jmat)**2., axis=0)
 
-        regDiag = []
+        # Create the pre-conditioner
+        self.regDiag = np.zeros_like(self.invProb.model)
+
         for reg in self.reg.objfcts:
-            regDiag.append((reg.W.T*reg.W).diagonal())
+            # Check if he has wire
+            if getattr(reg.mapping, 'P', None) is None:
+                self.regDiag += (reg.W.T*reg.W).diagonal()
+            else:
+                # He is a snitch!
+                self.regDiag += reg.mapping.P.T*(reg.W.T*reg.W).diagonal()
 
-        regDiag = np.hstack(regDiag)
-
-        diagA = JtJdiag + self.invProb.beta*regDiag
+        diagA = JtJdiag + self.invProb.beta*self.regDiag
 
         PC = Utils.sdiag((diagA)**-1.)
         self.opt.approxHinv = PC
@@ -1047,13 +1052,18 @@ class Update_DC_Wr(InversionDirective):
         # self.opt.approxHinv = None
         JtJdiag = np.sum((self.dmisfit.W * Jmat)**2., axis=0)
 
-        regDiag = []
+        # Create the pre-conditioner
+        self.regDiag = np.zeros_like(self.invProb.model)
+
         for reg in self.reg.objfcts:
-            regDiag.append((reg.W.T*reg.W).diagonal())
+            # Check if he has wire
+            if getattr(reg.mapping, 'P', None) is None:
+                self.regDiag += (reg.W.T*reg.W).diagonal()
+            else:
+                # He is a snitch!
+                self.regDiag += reg.mapping.P.T*(reg.W.T*reg.W).diagonal()
 
-        regDiag = np.hstack(regDiag)
-
-        diagA = JtJdiag + self.invProb.beta*regDiag
+        diagA = JtJdiag + self.invProb.beta*self.regDiag
 
         PC = Utils.sdiag((diagA)**-1.)
         self.opt.approxHinv = PC
