@@ -687,11 +687,16 @@ class UpdatePreCond(InversionDirective):
     def initialize(self):
 
         # Create the pre-conditioner
-        regDiag = []
-        for reg in self.reg.objfcts:
-            regDiag.append((reg.W.T*reg.W).diagonal())
+        self.regDiag = np.zeros_like(self.invProb.model)
 
-        regDiag = np.hstack(regDiag)
+        for reg in self.reg.objfcts:
+            # Check if he has wire
+            if getattr(reg.mapping, 'P', None) is None:
+                self.regDiag += (reg.W.T*reg.W).diagonal()
+            else:
+                # He is a snitch!
+                self.regDiag += reg.mapping.P.T*(reg.W.T*reg.W).diagonal()
+
 
         # Deal with the linear case
         if getattr(self.opt, 'JtJdiag', None) is None:
@@ -706,7 +711,7 @@ class UpdatePreCond(InversionDirective):
 
             self.opt.JtJdiag = JtJdiag
 
-        diagA = self.opt.JtJdiag + self.invProb.beta*regDiag
+        diagA = self.opt.JtJdiag + self.invProb.beta*self.regDiag
 
         PC = Utils.sdiag((diagA)**-1.)
         self.opt.approxHinv = PC
@@ -717,14 +722,19 @@ class UpdatePreCond(InversionDirective):
             return
 
         # Update the pre-conditioner
-        regDiag = []
-        for reg in self.reg.objfcts:
-            regDiag.append((reg.W.T*reg.W).diagonal())
+        self.regDiag = np.zeros_like(self.invProb.model)
 
-        regDiag = np.hstack(regDiag)
+        for reg in self.reg.objfcts:
+            # Check if he has wire
+            if getattr(reg.mapping, 'P', None) is None:
+                self.regDiag += (reg.W.T*reg.W).diagonal()
+            else:
+                # He is a snitch!
+                self.regDiag += reg.mapping.P.T*(reg.W.T*reg.W).diagonal()
+
 
         # Assumes that opt.JtJdiag has been updated or static
-        diagA = self.opt.JtJdiag + self.invProb.beta*regDiag
+        diagA = self.opt.JtJdiag + self.invProb.beta*self.regDiag
 
         PC = Utils.sdiag((diagA)**-1.)
         self.opt.approxHinv = PC
@@ -996,6 +1006,7 @@ class Update_DC_Wr(InversionDirective):
 
     wrType = 'distanceW'
     changeMref = False
+    eps = 0.
 
     def initialize(self):
 
@@ -1003,7 +1014,7 @@ class Update_DC_Wr(InversionDirective):
         Jmat = self.prob[0].getJ(m, self.prob[0].fields(m))
 
         if self.wrType == 'distanceW':
-            wr = np.sum((Jmat)**2., axis=0)**0.5
+            wr = np.sum((Jmat)**2.+self.eps**2., axis=0)**0.5
             wr = wr/wr.max()
             # for reg in self.reg.objfcts:
             self.reg.objfcts[0].cell_weights = self.reg.mapping * wr
@@ -1032,7 +1043,7 @@ class Update_DC_Wr(InversionDirective):
         m = self.invProb.model
         Jmat = self.prob[0].getJ(m, self.prob[0].fields(m))
 
-        wr = np.sum((Jmat)**2., axis=0)**0.5
+        wr = np.sum((Jmat)**2.+self.eps**2., axis=0)**0.5
         wr = wr/wr.max()
         if self.wrType == 'distanceW':
             # for reg in self.reg.objfcts:

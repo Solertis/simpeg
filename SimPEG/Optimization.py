@@ -1082,48 +1082,60 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
             # It is a Combo objective, so will have to loop
             self.ComboObjFun = True
 
-        # ensure bound vectors are the same size as the model
+        # # ensure bound vectors are the same size as the model
+        # if type(self.lower) is not np.ndarray:
+
+        #     if self.ComboObjFun:
+
+        #         # Create a list of bounds for Combo Objective if not alreary
+        #         lower = []
+        #         if not isinstance(self.lower, list):
+        #             for reg in self.parent.reg:
+        #                 lower.append(self.lower)
+        #             self.lower = lower
+
+        #         # Expand the list into a vector
+        #         temp_lower = np.zeros_like(x0)
+        #         for reg, lower in zip(self.parent.reg.objfcts, self.lower):
+        #             temp_lower[reg.mapping.index] += np.ones(reg.mapping.shape[0])*lower
+
+        #         self.lower = temp_lower
+
+        #     else:
+        #         self.lower = np.ones_like(x0)*self.lower
+
+        # if type(self.upper) is not np.ndarray:
+
+        #     if self.ComboObjFun:
+
+        #         # Create a list of bounds for Combo Objective if not alreary
+        #         upper = []
+        #         if not isinstance(self.upper, list):
+        #             for reg in self.parent.reg:
+        #                 upper.append(self.upper)
+        #             self.upper = upper
+
+        #         # Expand the list into a vector
+        #         temp_upper = np.zeros_like(x0)
+        #         for reg, upper in zip(self.parent.reg.objfcts, self.upper):
+        #             temp_upper[reg.mapping.index] += np.ones(reg.mapping.shape[0])*upper
+
+        #         self.upper = temp_upper
+
+        #     else:
+        #         self.upper = np.ones_like(x0)*self.upper
+                # ensure bound vectors are the same size as the model
         if type(self.lower) is not np.ndarray:
 
-            if self.ComboObjFun:
+            self.lower = np.ones_like(x0)*self.lower
 
-                # Create a list of bounds for Combo Objective if not alreary
-                lower = []
-                if not isinstance(self.lower, list):
-                    for reg in self.parent.reg:
-                        lower.append(self.lower)
-                    self.lower = lower
-
-                # Expand the list into a vector
-                temp_lower = np.zeros_like(x0)
-                for reg, lower in zip(self.parent.reg.objfcts, self.lower):
-                    temp_lower[reg.mapping.index] += np.ones(reg.mapping.shape[0])*lower
-
-                self.lower = temp_lower
-
-            else:
-                self.lower = np.ones_like(x0)*self.lower
+        assert(self.lower.shape[0] != x0.shape[0], "Lower bound must be a list or vector length(model)")
 
         if type(self.upper) is not np.ndarray:
 
-            if self.ComboObjFun:
+            self.upper = np.ones_like(x0)*self.upper
 
-                # Create a list of bounds for Combo Objective if not alreary
-                upper = []
-                if not isinstance(self.upper, list):
-                    for reg in self.parent.reg:
-                        upper.append(self.upper)
-                    self.upper = upper
-
-                # Expand the list into a vector
-                temp_upper = np.zeros_like(x0)
-                for reg, upper in zip(self.parent.reg.objfcts, self.upper):
-                    temp_upper[reg.mapping.index] += np.ones(reg.mapping.shape[0])*upper
-
-                self.upper = temp_upper
-
-            else:
-                self.upper = np.ones_like(x0)*self.upper
+        assert(self.lower.shape[0] != x0.shape[0], "Upper bound must be a list or vector length(model)")
 
     @Utils.count
     def projection(self, x):
