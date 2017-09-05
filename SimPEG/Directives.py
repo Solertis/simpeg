@@ -1014,7 +1014,7 @@ class Update_DC_Wr(InversionDirective):
         Jmat = self.prob[0].getJ(m, self.prob[0].fields(m))
 
         if self.wrType == 'distanceW':
-            wr = np.sum((Jmat)**2.+self.eps**2., axis=0)**0.5
+            wr = np.sum((Jmat)**2., axis=0)**0.5+self.eps
             wr = wr/wr.max()
             # for reg in self.reg.objfcts:
             self.reg.objfcts[0].cell_weights = self.reg.mapping * wr
