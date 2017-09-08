@@ -1498,13 +1498,12 @@ class PetroRegularization(BaseComboRegularization):
     alpha_nll = Props.Float("PetroPhysics weights")
 
     def __init__(
-        self, mesh, GMmodel, gamma = None,
+        self, mesh, GMmodel,
         alpha_s=Utils.Zero(), alpha_x=1.0, alpha_y=1.0, alpha_z=1.0,alpha_nll=1.,
         alpha_xx=Utils.Zero(), alpha_yy=Utils.Zero(), alpha_zz=Utils.Zero(),
         **kwargs
     ):
         self._GMmodel = GMmodel
-        self._gamma = gamma
 
         objfcts = [
             PetroSmallness(GMmodel=self._GMmodel, mesh = mesh, **kwargs),
@@ -1544,15 +1543,3 @@ class PetroRegularization(BaseComboRegularization):
     @classmethod
     def membership(self,m):
         return self.objfcts[0].membership(m)
-
-
-    @property
-    def gamma(self):
-        if getattr(self, '_gamma', None) is None:
-            self._gamma = np.zeros(self.GMmodel.n_components)
-        return self._gamma
-
-    @gamma.setter
-    def gamma(self,array):
-        if array is not None:
-            self._gamma = array

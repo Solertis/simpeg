@@ -844,21 +844,21 @@ class GaussianMixtureUpdateModel(InversionDirective):
             print('before update precisions: ', clfupdate.precisions_)
 
         for k in range(clfupdate.n_components):
-            clfupdate.means_[k] =       (1./(1.+self.invProb.reg.gamma[k]))*(clfupdate.means_[k] + self.invProb.reg.gamma[k]*self.invProb.petromodelRef.means_[k])
+            clfupdate.means_[k] =       (1./(1.+self.invProb.betapetro[k]))*(clfupdate.means_[k] + self.invProb.betapetro[k]*self.invProb.petromodelRef.means_[k])
 
             if self.invProb.petromodelRef.covariance_type == 'tied':
                 pass
             elif self.update_covariances:
-                clfupdate.covariances_[k] = (1./(1.+self.invProb.reg.gamma[k]))*(clfupdate.covariances_[k] + self.invProb.reg.gamma[k]*self.invProb.petromodelRef.covariances_[k])
+                clfupdate.covariances_[k] = (1./(1.+self.invProb.betapetro[k]))*(clfupdate.covariances_[k] + self.invProb.betapetro[k]*self.invProb.petromodelRef.covariances_[k])
             else:
-                clfupdate.precisions_[k] =  (1./(1.+self.invProb.reg.gamma[k]))*(clfupdate.precisions_[k] + self.invProb.reg.gamma[k]*self.invProb.petromodelRef.precisions_[k])
+                clfupdate.precisions_[k] =  (1./(1.+self.invProb.betapetro[k]))*(clfupdate.precisions_[k] + self.invProb.betapetro[k]*self.invProb.petromodelRef.precisions_[k])
 
-            clfupdate.weights_[k] =     (1./(1.+self.invProb.reg.gamma[k]))*(clfupdate.weights_[k] + self.invProb.reg.gamma[k]*self.invProb.petromodelRef.weights_[k])
+            clfupdate.weights_[k] =     (1./(1.+self.invProb.betapetro[k]))*(clfupdate.weights_[k] + self.invProb.betapetro[k]*self.invProb.petromodelRef.weights_[k])
 
         if self.invProb.petromodelRef.covariance_type == 'tied':
             if self.update_covariances:
                 clfupdate.covariances_ = self.invProb.petromodelRef.covariances_
-                #clfupdate.covariances_ = (1./(1.+np.sum(self.invProb.reg.gamma)))*(clfupdate.covariances_ + np.sum(self.invProb.reg.gamma)*self.invProb.petromodelRef.covariances_)
+                #clfupdate.covariances_ = (1./(1.+np.sum(self.invProb.betapetro)))*(clfupdate.covariances_ + np.sum(self.invProb.betapetro)*self.invProb.petromodelRef.covariances_)
                 clfupdate.precisions_cholesky_ = Utils._compute_precision_cholesky(clfupdate.covariances_, clfupdate.covariance_type)
                 Utils.computePrecision(clfupdate)
             else:
@@ -889,4 +889,4 @@ class GaussianMixtureUpdateModel(InversionDirective):
                     'BetaSchedule is cooling Beta. Iteration: {0:d}'
                     .format(self.opt.iter)
                 )
-            self.invProb.reg.gamma /= self.coolingFactor
+            self.invProb.betapetro /= self.coolingFactor
