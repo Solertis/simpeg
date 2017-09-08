@@ -1415,7 +1415,7 @@ class PetroSmallness(BaseRegularization):
     Smallness term for the petrophysically constrained regularization
     """
 
-    _multiplier_pair = 'alpha_nll'
+    _multiplier_pair = 'alpha_s'
 
     def __init__(self, GMmodel, mesh=None, **kwargs):
 
@@ -1494,19 +1494,17 @@ class PetroSmallness(BaseRegularization):
 
 class PetroRegularization(BaseComboRegularization):
 
-    # Properties
-    alpha_nll = Props.Float("PetroPhysics weights")
-
     def __init__(
-        self, mesh, GMmodel,
-        alpha_s=Utils.Zero(), alpha_x=1.0, alpha_y=1.0, alpha_z=1.0,alpha_nll=1.,
+        self, mesh, GMmref, GMmodel = None,
+        alpha_s=1., alpha_x=1.0, alpha_y=1.0, alpha_z=1.0,
         alpha_xx=Utils.Zero(), alpha_yy=Utils.Zero(), alpha_zz=Utils.Zero(),
         **kwargs
     ):
+        self.GMmref = GMmref
         self._GMmodel = GMmodel
 
         objfcts = [
-            PetroSmallness(GMmodel=self._GMmodel, mesh = mesh, **kwargs),
+            PetroSmallness(GMmodel=self.GMmodel, mesh = mesh, **kwargs),
             SmoothDeriv(mesh=mesh, orientation='x', **kwargs),
             SmoothDeriv2(mesh=mesh, orientation='x', **kwargs),
         ]
@@ -1525,13 +1523,19 @@ class PetroRegularization(BaseComboRegularization):
 
         super(PetroRegularization, self).__init__(
             mesh,
-            alpha_s=alpha_s, alpha_x=alpha_x, alpha_y=alpha_y, alpha_z=alpha_z,#alpha_nll=alpha_nll,
+            alpha_s=alpha_s, alpha_x=alpha_x, alpha_y=alpha_y, alpha_z=alpha_z,
             alpha_xx=alpha_xx, alpha_yy=alpha_yy, alpha_zz=alpha_zz,
-            objfcts=objfcts, **kwargs
-        )
+            objfcts=objfcts, **kwargs)
+
+        #Utils.setKwargs(self, **kwargs)
+
+    # Properties
+    alpha_s = Props.Float("PetroPhysics weights")
 
     @property
     def GMmodel(self):
+        if getattr(self, '_GMmodel', None) is None:
+            self._GMmodel = self.GMmref
         return self._GMmodel
 
     @GMmodel.setter
