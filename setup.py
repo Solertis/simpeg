@@ -41,6 +41,7 @@ setup(
         'matplotlib',
         'properties[math]>=0.3.1b2',
         'discretize',
+        'scikit-learn'
     ],
     author="Rowan Cockett",
     author_email="rowanc1@gmail.com",

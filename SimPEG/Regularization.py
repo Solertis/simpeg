@@ -1438,33 +1438,32 @@ class PetroSmallness(BaseRegularization):
             return Utils.sdiag(np.sqrt(self.regmesh.vol * self.cell_weights))
         return Utils.sdiag(np.sqrt(self.regmesh.vol))
 
-    def _delta_m(self, m):
-        if self.mref is None:
-            return m
-        return (-self.mref + m)  # in case self.mref is Zero, returns type m
+    def _delta_m(self, m,mref):
+        return (-mref + m)  # in case self.mref is Zero, returns type m
 
     @Utils.timeIt
     def __call__(self, m):
 
-        membership = self.membership(m)
+        #membership = self.membership(m)
+        #mref = Utils.mkvc(self.GMmodel.means_[membership])
+        #dm = self.mapping * (self._delta_m(m,mref))
+        #r0 = self.W * dm
 
-        dm = self.mapping * (self._delta_m(m))
-        r0 = self.W * dm
+        #if self.GMmodel.covariance_type == 'tied':
+        #    r1 = self.W * np.r_[[np.dot(self.GMmodel.precisions_, np.r_[dm[i]]) for i in range(len(m))]]
+        #else:
+        #    r1 = self.W * np.r_[[np.dot(self.GMmodel.precisions_[membership[i]], np.r_[dm[i]]) for i in range(len(m))]]
 
-        if self.GMmodel.covariance_type == 'tied':
-            r1 = self.W * np.r_[[np.dot(self.GMmodel.precisions_, np.r_[dm[i]]) for i in range(len(m))]]
-        else:
-            r1 = self.W * np.r_[[np.dot(self.GMmodel.precisions_[membership[i]], np.r_[dm[i]]) for i in range(len(m))]]
-
-        return 0.5 * r0.dot(Utils.mkvc(r1))
+        #return 0.5 * r0.dot(Utils.mkvc(r1))
+        return -np.sum((self.W*self.W.T)*self.GMmodel.score_samples((self.mapping*m)[:,np.newaxis]))
 
     @Utils.timeIt
     def deriv(self, m):
 
         membership = self.membership(m)
-
-        mD = self.mapping.deriv(self._delta_m(m))
-        dm = self.mapping * (self._delta_m(m))
+        mref = Utils.mkvc(self.GMmodel.means_[membership])
+        mD = self.mapping.deriv(self._delta_m(m,mref))
+        dm = self.mapping * (self._delta_m(m,mref))
         if self.GMmodel.covariance_type == 'tied':
             r = self.W * np.r_[[np.dot(self.GMmodel.precisions_, np.r_[dm[i]]) for i in range(len(m))]]
         else:
@@ -1477,13 +1476,14 @@ class PetroSmallness(BaseRegularization):
         # For a positive definite Hessian, we approximate it with the covariance of the cluster
         # whose each point belong
         membership = self.membership(m)
+        mref = Utils.mkvc(self.GMmodel.means_[membership])
 
         if self.GMmodel.covariance_type == 'tied':
             r = self.GMmodel.precisions_[np.zeros_like(membership)]
         else:
             r =  self.GMmodel.precisions_[membership]
 
-        mD = self.mapping.deriv(self._delta_m(m))
+        mD = self.mapping.deriv(self._delta_m(m,mref))
         r = self.W.T * self.W * Utils.sdiag(Utils.mkvc(r))
 
         if v is not None:
@@ -1501,6 +1501,7 @@ class PetroRegularization(BaseComboRegularization):
         **kwargs
     ):
         self.GMmref = GMmref
+        Utils.order_clusters_GM_weight(self.GMmref)
         self._GMmodel = GMmodel
 
         objfcts = [

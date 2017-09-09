@@ -832,11 +832,15 @@ class GaussianMixtureUpdateModel(InversionDirective):
         clfupdate = Utils.GaussianMixture(n_components=self.invProb.reg.GMmref.n_components,
                                     covariance_type=self.invProb.reg.GMmref.covariance_type,
                                     max_iter=1000, n_init=10,
-                                    #weights_init=self.invProb.reg.GMmodel.weights_,
-                                    #means_init=self.invProb.reg.GMmodel.means_,
-                                    #precisions_init=self.invProb.reg.GMmodel.precisions_
+                                    #weights_init=self.invProb.reg.GMmref.weights_,
+                                    #means_init=self.invProb.reg.GMmref.means_,
+                                    #precisions_init=self.invProb.reg.GMmref.precisions_
                                     )
         clfupdate = clfupdate.fit(m)
+        if self.verbose:
+            print('before order means: ', clfupdate.means_)
+            print('before order weights: ', clfupdate.weights_)
+            print('before order precisions: ', clfupdate.precisions_)
         Utils.order_cluster(clfupdate, self.invProb.reg.GMmref)
         if self.verbose:
             print('before update means: ', clfupdate.means_)
