@@ -20,6 +20,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.mixture import GaussianMixture
 
+# Better rendering
+import seaborn
+seaborn.set()
+
 # Random seed for reproductibility
 np.random.seed(1)
 # Mesh
@@ -90,7 +94,8 @@ clf.fit(mtrue.reshape(-1, 1))
 minit = m0
 
 # Petrophyically constrained regularization
-reg = Regularization.PetroRegularization(GMmref=clf, mesh=mesh, mref=m0)
+reg = Regularization.PetroRegularization(GMmref=clf, mesh=mesh, mref=m0,
+                                         alpha_s=1.,alpha_x=1.)
 
 # Include the reference model in the smoothness term
 reg.mrefInSmooth = True
