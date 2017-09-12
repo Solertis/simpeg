@@ -154,7 +154,7 @@ clf.fit(mtrue[actind].reshape(-1, 1))
 Utils.order_clusters_GM_weight(clf)
 
 reg = Regularization.PetroRegularization(GMmref=clf,  mesh=mesh,
-                                         mref=m0, alpha_x=100.,  alpha_y=100.,
+                                         mref=m0, alpha_s=1e-4, alpha_x=1.,  alpha_y=1.,
                                          indActive=actind)
 reg.mrefInSmooth = True
 gamma_petro = np.ones(clf.n_components)*.75
