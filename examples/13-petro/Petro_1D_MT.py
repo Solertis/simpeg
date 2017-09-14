@@ -97,6 +97,9 @@ def appres_phase_from_data(data, frequency):
 
     return app_res, phase
 
+# Petrophysics Inversion
+########################
+
 clf = GaussianMixture(n_components=4, covariance_type='full',max_iter=1000, n_init=20)
 clf.fit(mtrue.reshape(-1,1))
 Utils.order_clusters_GM_weight(clf)
@@ -108,47 +111,97 @@ sigma_0 = 1e-2  # starting conductivity
 mref = np.log(sigma_ref)*np.ones(mesh.nC)
 m0 = np.log(sigma_0)*np.ones(mesh.nC)
 
+
+# Simple Inversion
+##################
+
+alpha_s=1e-2  # smallness contribution
+alpha_z=1.  # smoothness contribution to the regularization
+use_betaest=True  # estimate the initial beta
+beta0_ratio=10.   # starting contribution of regularization 10x larger than the data misfit
+coolingFactor=1.5
+coolingRate=1
+
 # Data misfit
 dmisfit = DataMisfit.l2_DataMisfit(survey)
 dmisfit.W = 1./uncert
 
-reg = Regularization.PetroRegularization(GMmref=clf, mesh=prob.mesh, mref=m0)
+# Regularization
+reg = Regularization.Simple(
+        prob.mesh, alpha_s=alpha_s, alpha_x=alpha_z, mref=mref
+    ) # since we are in 1D, we work with the first dimension
+
+    # Optimization
+opt = Optimization.InexactGaussNewton(maxIter=35, LSshorten=0.05)
+
+    # Statement of the inverse problem
+invProb = InvProblem.BaseInvProblem(dmisfit, reg, opt)
+
+    # Inversion Directives
+beta = Directives.BetaSchedule(
+        coolingFactor=coolingFactor, coolingRate=coolingRate
+    )
+#invProb.beta = beta0
+target = Directives.TargetMisfit()
+
+    #Plot = PlotIter()
+
+directives = [beta,target]#Plot
+
+betaest = Directives.BetaEstimate_ByEig(beta0_ratio=beta0_ratio)
+directives.append(betaest)
+
+    # assemble in an inversion
+inv = Inversion.BaseInversion(invProb, directiveList=directives)
+prob.counter = opt.counter = Utils.Counter()
+opt.remember('xc')
+
+# run the inversion
+l2model = inv.run(m0)
+
+# Petrophysics Inversion
+########################
+
+# Data misfit
+dmisfit = DataMisfit.l2_DataMisfit(survey)
+dmisfit.W = 1./uncert
+
+reg = Regularization.SimplePetroRegularization(GMmref=clf, mesh=prob.mesh, mref=m0)
 reg.mrefInSmooth = True
-reg.alpha_s = 1e-6
-reg.alpha_x = 100.
-reg.alpha_xx = 100.
-opt = Optimization.InexactGaussNewton(maxIter=20)
+reg.alpha_s = 1e-3
+reg.alpha_x = 1.
+
+opt = Optimization.InexactGaussNewton(maxIter=11)
 opt.remember('xc')
 
 # Statement of the inverse problem
 invProb = InvProblem.BaseInvProblem(dmisfit, reg, opt)
 
-gamma = np.ones(clf.n_components)*0.9
+gamma = np.ones(clf.n_components)*0.75
 invProb.reg.gamma = gamma
 
 # Directives
 target = Directives.TargetMisfit()
 petrodir = Directives.GaussianMixtureUpdateModel(verbose=False)
-betaest = Directives.BetaEstimate_ByEig(beta0_ratio=1.)
-directives = [petrodir, betaest,target]
+#betaest = Directives.BetaEstimate_ByEig(beta0_ratio=1.)
+invProb.beta = 2e-2
+directives = [petrodir]
 
 # assemble in an inversion
 inv = Inversion.BaseInversion(invProb, directiveList=directives)
 
 # run the inversion
-mopt = inv.run(m0)
+mcluster = inv.run(m0)
 
-l2model = np.loadtxt('/Volumes/MacintoshHD/Users/thibautastic/PhD_UBC/GITHUB/tle-magnetotelluric_inversion/L2model_at_dmis')
 
 fig0 = plt.figure()
 ax1 = fig0.add_subplot(111)
 
 M = prob.mesh
-model = mopt
 modelref = invProb.reg.mref
 plt.semilogx(-M.vectorCCx, mtrue, color='black')
 plt.semilogx(-M.vectorCCx, invProb.reg.mref, color='black', linestyle ='dashed')
-plt.semilogx(-M.vectorCCx, model, color='red')
+plt.semilogx(-M.vectorCCx, mcluster, color='red')
 plt.semilogx(-M.vectorCCx, l2model, color='blue',linestyle='dashed')
 plt.legend(['True Model','Petro-constrained model','L2 model'])
 
