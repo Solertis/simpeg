@@ -480,23 +480,68 @@ class SaveOutputDictEveryIteration(SaveEveryIteration):
     def initialize(self):
         print("SimPEG.SaveOutputDictEveryIteration will save your inversion progress as dictionary: '###-{0!s}.npz'".format(self.fileName))
 
-    def endIter(self):
+        self.iter =[]
+        self.beta = []
+        self.phi_d = []
+        self.phi_m = []
+        self.phi_m_small = []
+        self.phi_m_smooth_x = []
+        self.phi_m_smooth_y = []
+        self.phi_m_smooth_z = []
+        self.phi = []
+        self.m = []
+        self.dpred =[]
+        self.mref = []
 
+    def endIter(self):
+        phi_m_small = (
+            self.reg.objfcts[0](self.invProb.model) * self.reg.alpha_s
+        )
+        phi_m_smooth_x = (
+            self.reg.objfcts[1](self.invProb.model) * self.reg.alpha_x
+        )
+        phi_m_smooth_y = np.nan
+        phi_m_smooth_z = np.nan
+
+        if self.reg.regmesh.dim == 2:
+            phi_m_smooth_y = (
+                reg.objfcts[2](self.invProb.model) * self.reg.alpha_y
+            )
+        elif self.reg.regmesh.dim == 3:
+            phi_m_smooth_y = (
+                self.reg.objfcts[2](self.invProb.model) * self.reg.alpha_y
+            )
+            phi_m_smooth_z = (
+                self.reg.objfcts[3](self.invProb.model) * self.reg.alpha_z
+            )
+
+        self.iter.append(self.opt.iter)
+        self.beta.append(self.invProb.beta)
+        self.phi.append(self.opt.f)
+        self.phi_d.append(self.invProb.phi_d)
+        self.phi_m.append(self.invProb.phi_m)
+        self.phi_m_small.append(phi_m_small)
+        self.phi_m_smooth_x.append(phi_m_smooth_x)
+        self.phi_m_smooth_y.append(phi_m_smooth_y)
+        self.phi_m_smooth_z.append(phi_m_smooth_z)
+        self.m.append(self.invProb.model)
+        self.dpred.append(self.invProb.dpred)
+        self.mref.append(self.invProb.reg.mref)
         # Initialize the output dict
         outDict = {}
         # Save the data.
-        outDict['iter'] = self.opt.iter
-        outDict['beta'] = self.invProb.beta
-        outDict['phi_d'] = self.invProb.phi_d
-        outDict['phi_m'] = self.invProb.phi_m
-        outDict['phi_ms'] = self.reg._evalSmall(self.invProb.model)
-        outDict['phi_mx'] = self.reg._evalSmoothx(self.invProb.model)
-        outDict['phi_my'] = self.reg._evalSmoothy(self.invProb.model) if self.prob.mesh.dim >= 2 else 'NaN'
-        outDict['phi_mz'] = self.reg._evalSmoothz(self.invProb.model) if self.prob.mesh.dim == 3 else 'NaN'
-        outDict['f'] = self.opt.f
-        outDict['m'] = self.invProb.model
-        outDict['dpred'] = self.invProb.dpred
-
+        outDict['iter'] = self.iter
+        outDict['beta'] = self.beta
+        outDict['phi'] = self.phi
+        outDict['phi_d'] = self.phi_d
+        outDict['phi_m'] = self.phi_m
+        outDict['phi_ms'] = self.phi_m_small
+        outDict['phi_mx'] = self.phi_m_smooth_x
+        outDict['phi_my'] = self.phi_m_smooth_y
+        outDict['phi_mz'] = self.phi_m_smooth_z
+        outDict['m'] = self.m
+        outDict['dpred'] = self.dpred
+        outDict['mref'] = self.mref
         # Save the file as a npz
         np.savez('{:03d}-{:s}'.format(self.opt.iter,self.fileName), outDict)
 
@@ -832,6 +877,7 @@ class GaussianMixtureUpdateModel(InversionDirective):
         clfupdate = Utils.GaussianMixture(n_components=self.invProb.reg.GMmref.n_components,
                                     covariance_type=self.invProb.reg.GMmref.covariance_type,
                                     max_iter=1000, n_init=10,
+                                    reg_covar = self.invProb.reg.GMmref.reg_covar,
                                     #weights_init=self.invProb.reg.GMmref.weights_,
                                     #means_init=self.invProb.reg.GMmref.means_,
                                     #precisions_init=self.invProb.reg.GMmref.precisions_

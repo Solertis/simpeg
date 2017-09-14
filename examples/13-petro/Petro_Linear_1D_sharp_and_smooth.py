@@ -97,7 +97,7 @@ minit = m0
 
 # Petrophyically constrained regularization
 reg = Regularization.PetroRegularization(GMmref=clf, mesh=mesh, mref=m0,
-                                         alpha_s=1.,alpha_x=1e-3)
+                                         alpha_s=1.,alpha_x=1e-6)
 
 # Include the reference model in the smoothness term
 reg.mrefInSmooth = True
@@ -110,13 +110,14 @@ opt.remember('xc')
 invProb = InvProblem.BaseInvProblem(dmis, reg, opt)
 
 # Directives
-beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e-3)
+#beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e-3)
+invProb.beta = 1.
 gamma_petro = np.ones(clf.n_components)*.75
 petrodir = Directives.GaussianMixtureUpdateModel()
 invProb.reg.gamma = gamma_petro
 
 # Setup Inversion
-inv = Inversion.BaseInversion(invProb, directiveList=[beta, petrodir])
+inv = Inversion.BaseInversion(invProb, directiveList=[petrodir])
 
 mcluster= inv.run(minit)
 
