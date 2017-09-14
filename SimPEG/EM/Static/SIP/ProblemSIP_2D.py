@@ -3,55 +3,94 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from SimPEG import Utils
-from SimPEG.EM.Base import BaseEMProblem
-from .SurveyDC import Survey_ky
-from .FieldsDC_2D import Fields_ky, Fields_ky_CC, Fields_ky_N
 import numpy as np
-from SimPEG.Utils import Zero
-from .BoundaryUtils import getxBCyBC_CC
+
+from SimPEG import Utils
+from SimPEG import Props
+from SimPEG import Maps
+
+from SimPEG.EM.Base import BaseEMProblem
+from SimPEG.EM.Static.DC.FieldsDC_2D import (
+    Fields_ky, Fields_ky_CC, Fields_ky_N
+    )
+from SimPEG.EM.Static.DC import getxBCyBC_CC
+from SimPEG.EM.Static.IP import BaseIPProblem_2D
+from .SurveySIP import Survey
 
 
-class BaseDCProblem_2D(BaseEMProblem):
-    """
-    Base 2.5D DC problem
-    """
+class BaseSIPProblem_2D(BaseIPProblem_2D):
 
-    surveyPair = Survey_ky
-    fieldsPair = Fields_ky  # SimPEG.EM.Static.Fields_2D
-    nky = 15
-    kys = np.logspace(-4, 1, nky)
-    Ainv = [None for i in range(nky)]
-    nT = nky  # Only for using TimeFields
+    eta, etaMap, etaDeriv = Props.Invertible(
+        "Electrical Chargeability (V/V)"
+    )
 
-    def fields(self, m):
-        if m is not None:
-            self.model = m        
-        
-        for i in range(self.nky):
-            if self.Ainv[i] is not None:
-                self.Ainv[i].clean()
+    tau, tauMap, tauDeriv = Props.Invertible(
+        "Time constant (s)",
+        default=0.1
+    )
 
-        f = self.fieldsPair(self.mesh, self.survey)
-        Srcs = self.survey.srcList
-        for iky in range(self.nky):
-            ky = self.kys[iky]
-            A = self.getA(ky)
-            self.Ainv[iky] = self.Solver(A, **self.solverOpts)
-            RHS = self.getRHS(ky)
-            u = self.Ainv[iky] * RHS
-            f[Srcs, self._solutionType, iky] = u
-        return f
+    taui, tauiMap, tauiDeriv = Props.Invertible(
+        "Inverse of time constant (1/s)"
+    )
 
-    def getJ(self, m, f=None):
+    Props.Reciprocal(tau, taui)
+
+    c, cMap, cDeriv = Props.Invertible(
+        "Frequency dependency",
+        default=1.
+    )
+
+    surveyPair = Survey
+    fieldsPair = Fields_ky
+    f = None
+    actinds = None
+    actMap = None
+
+    def getPeta(self, t):
+        peta = self.eta*np.exp(-(self.taui*t)**self.c)
+        return peta
+
+    def PetaEtaDeriv(self, t, v, adjoint=False):
+        # v = np.array(v, dtype=float)
+        taui_t_c = (self.taui*t)**self.c
+        dpetadeta = np.exp(-taui_t_c)
+        if adjoint:
+            return self.etaDeriv.T * (Utils.sdiag(dpetadeta) * v)
+        else:
+            return dpetadeta * (self.etaDeriv*v)
+
+    def PetaTauiDeriv(self, t, v, adjoint=False):
+        # v = np.array(v, dtype=float)
+        taui_t_c = (self.taui*t)**self.c
+        dpetadtaui = (
+            - self.c * self.eta / self.taui * taui_t_c * np.exp(-taui_t_c)
+            )
+        if adjoint:
+            return self.tauiDeriv.T * (Utils.sdiag(dpetadtaui)*v)
+        else:
+            return dpetadtaui * (self.tauiDeriv*v)
+
+    def PetaCDeriv(self, t, v, adjoint=False):
+        # v = np.array(v, dtype=float)
+        taui_t_c = (self.taui*t)**self.c
+        dpetadc = (
+            -self.eta * (taui_t_c)*np.exp(-taui_t_c) * np.log(self.taui*t)
+            )
+        if adjoint:
+            return self.cDeriv.T * (Utils.sdiag(dpetadc)*v)
+        else:
+            return dpetadc * (self.cDeriv*v)
+
+    def getJ(self, f=None):
         """
             Generate Full sensitivity matrix
         """
-        if f is None:
-            f = self.fields(m)
 
-        self.model = m
+        if self.verbose:
+            print (">> Compute Sensitivity matrix")
 
+        if self.f is None:
+            self.fieldsdc()
         Jt = []
 
         # Assume y=0.
@@ -61,17 +100,17 @@ class BaseDCProblem_2D(BaseEMProblem):
         y = 0.
         for src in self.survey.srcList:
             for rx in src.rxList:
-                Jtv_temp1 = np.zeros((m.size, rx.nD), dtype=float)
-                Jtv_temp0 = np.zeros((m.size, rx.nD), dtype=float)
-                Jtv = np.zeros((m.size, rx.nD), dtype=float)
+                Jtv_temp1 = np.zeros((self.actinds.sum(), rx.nD), dtype=float)
+                Jtv_temp0 = np.zeros((self.actinds.sum(), rx.nD), dtype=float)
+                Jtv = np.zeros((self.actinds.sum(), rx.nD), dtype=float)
                 # TODO: this loop is pretty slow .. (Parellize)
                 for iky in range(self.nky):
-                    u_src = f[src, self._solutionType, iky]
+                    u_src = self.f[src, self._solutionType, iky]
                     ky = self.kys[iky]
                     AT = self.getA(ky)
 
                     # wrt f, need possibility wrt m
-                    P = rx.getP(self.mesh, rx.projGLoc(f)).toarray()
+                    P = rx.getP(self.mesh, rx.projGLoc(self.f)).toarray()
 
                     ATinvdf_duT = self.Ainv[iky] * (P.T)
 
@@ -79,7 +118,7 @@ class BaseDCProblem_2D(BaseEMProblem):
                                             adjoint=True)
                     Jtv_temp1 = 1./np.pi*(-dA_dmT)
                     if rx.nD == 1:
-                        Jtv_temp1 = Jtv_temp1.reshape([-1,1])
+                        Jtv_temp1 = Jtv_temp1.reshape([-1, 1])
 
                     # Trapezoidal intergration
                     if iky == 0:
@@ -94,162 +133,116 @@ class BaseDCProblem_2D(BaseEMProblem):
 
         return np.hstack(Jt).T
 
+    def forward(self, m, f=None):
+        if self.fswitch == False:
+            f = self.fieldsdc()
+            self.J = self.getJ(f=f)
+            self.fswitch = True
+
+        ntime = len(self.survey.times)
+        Jv = []
+        self.model = m
+        for tind in range(ntime):
+            Jv.append(
+                self.J.dot(
+                    self.actMap.P.T*self.getPeta(self.survey.times[tind]))
+                )
+        return self.sign * np.hstack(Jv)
+
     def Jvec(self, m, v, f=None):
 
-        if f is None:
-            f = self.fields(m)
-
         self.model = m
+        if self.fswitch == False:
+            f = self.fieldsdc()
+            self.J = self.getJ(f=f)
+            self.fswitch = True
 
-        # TODO: This is not a good idea !! should change that as a list
-        Jv = self.dataPair(self.survey)  # same size as the data
-        Jv0 = self.dataPair(self.survey)
+        ntime = len(self.survey.times)
+        Jv = []
 
-        # Assume y=0.
-        # This needs some thoughts to implement in general when src is dipole
-        dky = np.diff(self.kys)
-        dky = np.r_[dky[0], dky]
-        y = 0.
+        for tind in range(ntime):
 
-        # TODO: this loop is pretty slow .. (Parellize)
-        for iky in range(self.nky):
-            ky = self.kys[iky]
-            A = self.getA(ky)
-            for src in self.survey.srcList:
-                u_src = f[src, self._solutionType, iky]  # solution vector
-                dA_dm_v = self.getADeriv(ky, u_src, v)
-                dRHS_dm_v = self.getRHSDeriv(ky, src, v)
-                du_dm_v = self.Ainv[iky] * (- dA_dm_v + dRHS_dm_v)
-                for rx in src.rxList:
-                    df_dmFun = getattr(f, '_{0!s}Deriv'.format(rx.projField),
-                                       None)
-                    df_dm_v = df_dmFun(iky, src, du_dm_v, v, adjoint=False)
-                    # Trapezoidal intergration
-                    Jv1_temp = 1./np.pi*rx.evalDeriv(ky, src, self.mesh, f,
-                                                     df_dm_v)
-                    if iky == 0:
-                        # First assigment
-                        Jv[src, rx] = Jv1_temp*dky[iky]*np.cos(ky*y)
-                    else:
-                        Jv[src, rx] += Jv1_temp*dky[iky]/2.*np.cos(ky*y)
-                        Jv[src, rx] += Jv0[src, rx]*dky[iky]/2.*np.cos(ky*y)
-                    Jv0[src, rx] = Jv1_temp.copy()
-        return Utils.mkvc(Jv)
+            t = self.survey.times[tind]
+            v0 = self.PetaEtaDeriv(t, v)
+            v1 = self.PetaTauiDeriv(t, v)
+            v2 = self.PetaCDeriv(t, v)
+            PTv = self.actMap.P.T*(v0+v1+v2)
+            Jv.append(self.J.dot(PTv))
+
+        return self.sign * np.hstack(Jv)
 
     def Jtvec(self, m, v, f=None):
-        if f is None:
-            f = self.fields(m)
 
         self.model = m
+        if self.fswitch == False:
+            f = self.fieldsdc()
+            self.J = self.getJ(f=f)
+            self.fswitch = True
 
-        # Ensure v is a data object.
-        if not isinstance(v, self.dataPair):
-            v = self.dataPair(self.survey, v)
+        ntime = len(self.survey.times)
+        Jtvec = np.zeros(m.size)
+        v = v.reshape((int(self.survey.nD/ntime), ntime), order="F")
 
-        Jtv = np.zeros(m.size, dtype=float)
+        for tind in range(ntime):
+            t = self.survey.times[tind]
+            Jtv = self.actMap.P*self.J.T.dot(v[:, tind])
+            Jtvec += (
+                self.PetaEtaDeriv(t, Jtv, adjoint=True) +
+                self.PetaTauiDeriv(t, Jtv, adjoint=True) +
+                self.PetaCDeriv(t, Jtv, adjoint=True)
+                )
 
-        # Assume y=0.
-        # This needs some thoughts to implement in general when src is dipole
-        dky = np.diff(self.kys)
-        dky = np.r_[dky[0], dky]
-        y = 0.
+        return self.sign * Jtvec
 
-        for src in self.survey.srcList:
-            for rx in src.rxList:
-                Jtv_temp1 = np.zeros(m.size, dtype=float)
-                Jtv_temp0 = np.zeros(m.size, dtype=float)
-
-                # TODO: this loop is pretty slow .. (Parellize)
-                for iky in range(self.nky):
-                    u_src = f[src, self._solutionType, iky]
-                    ky = self.kys[iky]
-                    AT = self.getA(ky)
-                    # wrt f, need possibility wrt m
-                    PTv = rx.evalDeriv(ky, src, self.mesh, f, v[src, rx],
-                                       adjoint=True)
-                    df_duTFun = getattr(f, '_{0!s}Deriv'.format(rx.projField),
-                                        None)
-                    df_duT, df_dmT = df_duTFun(iky, src, None, PTv,
-                                               adjoint=True)
-
-                    ATinvdf_duT = self.Ainv[iky] * df_duT
-
-                    dA_dmT = self.getADeriv(ky, u_src, ATinvdf_duT,
-                                            adjoint=True)
-                    dRHS_dmT = self.getRHSDeriv(ky, src, ATinvdf_duT,
-                                                adjoint=True)
-                    du_dmT = -dA_dmT + dRHS_dmT
-                    Jtv_temp1 = 1./np.pi*(df_dmT + du_dmT).astype(float)
-                    # Trapezoidal intergration
-                    if iky == 0:
-                        # First assigment
-                        Jtv += Jtv_temp1*dky[iky]*np.cos(ky*y)
-                    else:
-                        Jtv += Jtv_temp1*dky[iky]/2.*np.cos(ky*y)
-                        Jtv += Jtv_temp0*dky[iky]/2.*np.cos(ky*y)
-                    Jtv_temp0 = Jtv_temp1.copy()
-        return Utils.mkvc(Jtv)
-
-    def getSourceTerm(self, ky):
+    def getJtJdiag(self):
         """
-        takes concept of source and turns it into a matrix
+        Compute JtJ using adjoint problem. Still we never form
+        JtJ
         """
-        """
-        Evaluates the sources, and puts them in matrix form
+        ntime = len(self.survey.times)
+        JtJdiag = np.zeros_like(self.model)
+        for tind in range(ntime):
+            t = self.survey.times[tind]
+            Jtv = self.actMap.P*Utils.sdiag(1./self.mesh.vol)*self.J.T
+            JtJdiag += (
+                (self.PetaEtaDeriv(t, Jtv, adjoint=True)**2).sum(axis=1) +
+                (self.PetaTauiDeriv(t, Jtv, adjoint=True)**2).sum(axis=1) +
+                (self.PetaCDeriv(t, Jtv, adjoint=True)**2).sum(axis=1)
+                )
+        return JtJdiag
 
-        :rtype: (numpy.ndarray, numpy.ndarray)
-        :return: q (nC or nN, nSrc)
+    def MfRhoIDeriv(self, u):
+        """
+            Derivative of :code:`MfRhoI` with respect to the model.
         """
 
-        Srcs = self.survey.srcList
+        dMfRhoI_dI = -self.MfRhoI**2
+        dMf_drho = self.mesh.getFaceInnerProductDeriv(self.rho)(u)
+        drho_dlogrho = Utils.sdiag(self.rho)*self.actMap.P
+        return dMfRhoI_dI * (dMf_drho * drho_dlogrho)
 
-        if self._formulation == 'EB':
-            n = self.mesh.nN
-            # return NotImplementedError
-
-        elif self._formulation == 'HJ':
-            n = self.mesh.nC
-
-        q = np.zeros((n, len(Srcs)))
-
-        for i, src in enumerate(Srcs):
-            q[:, i] = src.eval(self)
-        return q
-
-    @property
-    def MnSigma(self):
+    # TODO: This should take a vector
+    def MeSigmaDeriv(self, u):
         """
-            Node inner product matrix for \\(\\sigma\\). Used in the E-B
-            formulation
+            Derivative of MeSigma with respect to the model
         """
-        # TODO: only works isotropic sigma
-        sigma = self.sigma
-        vol = self.mesh.vol
-        MnSigma = Utils.sdiag(self.mesh.aveN2CC.T*(Utils.sdiag(vol)*sigma))
-
-        return MnSigma
+        dsigma_dlogsigma = Utils.sdiag(self.sigma)*self.actMap.P
+        return (
+            self.mesh.getEdgeInnerProductDeriv(self.sigma)(u)
+            * dsigma_dlogsigma
+            )
 
     def MnSigmaDeriv(self, u):
         """
             Derivative of MnSigma with respect to the model
         """
         sigma = self.sigma
-        sigmaderiv = self.sigmaDeriv
         vol = self.mesh.vol
-        return (Utils.sdiag(u)*self.mesh.aveN2CC.T*Utils.sdiag(vol) *
-                self.sigmaDeriv)
-
-    @property
-    def MccRhoI(self):
-        """
-            Cell inner product matrix for \\(\\sigma\\). Used in the H-J
-            formulation
-        """
-        # TODO: only works isotropic sigma
-        rho = self.rho
-        vol = self.mesh.vol
-        MccRhoI = Utils.sdiag(1./(Utils.sdiag(vol)*rho))
-        return MccRhoI
+        dsigma_dlogsigma = Utils.sdiag(self.sigma)*self.actMap.P
+        return (
+            Utils.sdiag(u)*self.mesh.aveN2CC.T *
+            (Utils.sdiag(vol) * dsigma_dlogsigma)
+                )
 
     def MccRhoIDeriv(self, u):
         """
@@ -257,23 +250,31 @@ class BaseDCProblem_2D(BaseEMProblem):
         """
         rho = self.rho
         vol = self.mesh.vol
+        drho_dlogrho = Utils.sdiag(rho)*self.actMap.P
         return (
-            Utils.sdiag(u.flatten()*vol*(-1./rho**2))*self.rhoDeriv
+            Utils.sdiag(u.flatten()*vol*(-1./rho**2))*drho_dlogrho
             )
 
 
-class Problem2D_CC(BaseDCProblem_2D):
+class Problem2D_CC(BaseSIPProblem_2D):
     """
-    2.5D cell centered DC problem
+    2.5D cell centered Spectral IP problem
     """
 
     _solutionType = 'phiSolution'
     _formulation = 'HJ'  # CC potentials means J is on faces
     fieldsPair = Fields_ky_CC
+    sign = 1.
 
     def __init__(self, mesh, **kwargs):
-        BaseDCProblem_2D.__init__(self, mesh, **kwargs)
+        BaseSIPProblem_2D.__init__(self, mesh, **kwargs)
         self.setBC()
+        if self.actinds is None:
+            print ("You did not put Active indices")
+            print ("So, set actMap = IdentityMap(mesh)")
+            self.actinds = np.ones(mesh.nC, dtype=bool)
+
+        self.actMap = Maps.InjectActiveCells(mesh, self.actinds, 0.)
 
     def getA(self, ky):
         """
@@ -302,10 +303,8 @@ class Problem2D_CC(BaseDCProblem_2D):
         MccRhoIDeriv = self.MccRhoIDeriv
         rho = self.rho
         if adjoint:
-            return (
-                (MfRhoIDeriv(G * u).T) * (D.T * v) +
-                ky**2 * MccRhoIDeriv(u).T * v
-                   )
+            return((MfRhoIDeriv( G * u).T) * (D.T * v) +
+                   ky**2 * MccRhoIDeriv(u).T * v)
         return (D * ((MfRhoIDeriv(G * u)) * v) + ky**2*MccRhoIDeriv(u)*v)
 
     def getRHS(self, ky):
@@ -398,18 +397,25 @@ class Problem2D_CC(BaseDCProblem_2D):
         self.Grad = self.Div.T - P_BC*Utils.sdiag(y_BC)*M
 
 
-class Problem2D_N(BaseDCProblem_2D):
+class Problem2D_N(BaseSIPProblem_2D):
     """
-    2.5D nodal DC problem
+    2.5D nodal Spectral IP problem
     """
 
     _solutionType = 'phiSolution'
     _formulation = 'EB'  # CC potentials means J is on faces
     fieldsPair = Fields_ky_N
+    sign = -1.
 
     def __init__(self, mesh, **kwargs):
-        BaseDCProblem_2D.__init__(self, mesh, **kwargs)
+        BaseSIPProblem_2D.__init__(self, mesh, **kwargs)
         # self.setBC()
+        if self.actinds is None:
+            print ("You did not put Active indices")
+            print ("So, set actMap = IdentityMap(mesh)")
+            self.actinds = np.ones(mesh.nC, dtype=bool)
+
+        self.actMap = Maps.InjectActiveCells(mesh, self.actinds, 0.)
 
     def getA(self, ky):
         """
@@ -437,10 +443,10 @@ class Problem2D_N(BaseDCProblem_2D):
         Grad = self.mesh.nodalGrad
         sigma = self.sigma
         vol = self.mesh.vol
-
         if adjoint:
             return (self.MeSigmaDeriv(Grad*u).T * (Grad*v) +
                     ky**2*self.MnSigmaDeriv(u).T*v)
+
         return (Grad.T*(self.MeSigmaDeriv(Grad*u)*v) +
                 ky**2*self.MnSigmaDeriv(u)*v)
 
