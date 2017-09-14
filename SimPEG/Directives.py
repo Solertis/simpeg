@@ -505,7 +505,7 @@ class SaveOutputDictEveryIteration(SaveEveryIteration):
 
         if self.reg.regmesh.dim == 2:
             phi_m_smooth_y = (
-                reg.objfcts[2](self.invProb.model) * self.reg.alpha_y
+                self.reg.objfcts[2](self.invProb.model) * self.reg.alpha_y
             )
         elif self.reg.regmesh.dim == 3:
             phi_m_smooth_y = (
