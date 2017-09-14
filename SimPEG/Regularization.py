@@ -1496,7 +1496,7 @@ class PetroRegularization(BaseComboRegularization):
 
     def __init__(
         self, mesh, GMmref, GMmodel = None,
-        alpha_s=1., alpha_x=1.0, alpha_y=1.0, alpha_z=1.0,
+        alpha_s=1.0, alpha_x=1.0, alpha_y=1.0, alpha_z=1.0,
         alpha_xx=Utils.Zero(), alpha_yy=Utils.Zero(), alpha_zz=Utils.Zero(),
         **kwargs
     ):
@@ -1526,6 +1526,147 @@ class PetroRegularization(BaseComboRegularization):
             mesh,
             alpha_s=alpha_s, alpha_x=alpha_x, alpha_y=alpha_y, alpha_z=alpha_z,
             alpha_xx=alpha_xx, alpha_yy=alpha_yy, alpha_zz=alpha_zz,
+            objfcts=objfcts, **kwargs)
+
+        #Utils.setKwargs(self, **kwargs)
+
+    # Properties
+    alpha_s = Props.Float("PetroPhysics weights")
+
+    @property
+    def GMmodel(self):
+        if getattr(self, '_GMmodel', None) is None:
+            self._GMmodel = self.GMmref
+        return self._GMmodel
+
+    @GMmodel.setter
+    def GMmodel(self,gm):
+        if gm is not None:
+            self._GMmodel = gm
+        self.objfcts[0].GMmodel = self._GMmodel
+
+    @classmethod
+    def membership(self,m):
+        return self.objfcts[0].membership(m)
+
+
+# SImple Petrophysical Regularization
+#####################################
+
+class SimplePetroSmallness(BaseRegularization):
+    """
+    Smallness term for the petrophysically constrained regularization
+    """
+
+    _multiplier_pair = 'alpha_s'
+
+    def __init__(self, GMmodel, mesh=None, **kwargs):
+
+        super(SimplePetroSmallness, self).__init__(
+            mesh=mesh, **kwargs
+        )
+        self.GMmodel = GMmodel
+
+
+    def membership(self,m):
+        return self.GMmodel.predict(Utils.mkvc(m, numDims=2))
+
+
+    @property
+    def W(self):
+        """
+        Weighting matrix
+        """
+        if self.cell_weights is not None:
+            return Utils.sdiag(np.sqrt(self.cell_weights))
+        elif self._nC_residual != '*':
+            return sp.eye(self._nC_residual)
+        else:
+            return Utils.Identity()
+
+    def _delta_m(self, m,mref):
+        return (-mref + m)  # in case self.mref is Zero, returns type m
+
+    @Utils.timeIt
+    def __call__(self, m):
+
+        #membership = self.membership(m)
+        #mref = Utils.mkvc(self.GMmodel.means_[membership])
+        #dm = self.mapping * (self._delta_m(m,mref))
+        #r0 = self.W * dm
+
+        #if self.GMmodel.covariance_type == 'tied':
+        #    r1 = self.W * np.r_[[np.dot(self.GMmodel.precisions_, np.r_[dm[i]]) for i in range(len(m))]]
+        #else:
+        #    r1 = self.W * np.r_[[np.dot(self.GMmodel.precisions_[membership[i]], np.r_[dm[i]]) for i in range(len(m))]]
+
+        #return 0.5 * r0.dot(Utils.mkvc(r1))
+        return -np.sum((self.W*self.W.T)*self.GMmodel.score_samples((self.mapping*m)[:,np.newaxis]))
+
+    @Utils.timeIt
+    def deriv(self, m):
+
+        membership = self.membership(m)
+        mref = Utils.mkvc(self.GMmodel.means_[membership])
+        mD = self.mapping.deriv(self._delta_m(m,mref))
+        dm = self.mapping * (self._delta_m(m,mref))
+        if self.GMmodel.covariance_type == 'tied':
+            r = self.W * np.r_[[np.dot(self.GMmodel.precisions_, np.r_[dm[i]]) for i in range(len(m))]]
+        else:
+            r = self.W * np.r_[[np.dot(self.GMmodel.precisions_[membership[i]], np.r_[dm[i]]) for i in range(len(m))]]
+
+        return Utils.mkvc(mD.T * (self.W.T * r))
+
+    @Utils.timeIt
+    def deriv2(self, m, v=None):
+        # For a positive definite Hessian, we approximate it with the covariance of the cluster
+        # whose each point belong
+        membership = self.membership(m)
+        mref = Utils.mkvc(self.GMmodel.means_[membership])
+
+        if self.GMmodel.covariance_type == 'tied':
+            r = self.GMmodel.precisions_[np.zeros_like(membership)]
+        else:
+            r =  self.GMmodel.precisions_[membership]
+
+        mD = self.mapping.deriv(self._delta_m(m,mref))
+        r = self.W.T * self.W * Utils.sdiag(Utils.mkvc(r))
+
+        if v is not None:
+            return mD.T * (r * (mD * v))
+        else:
+            return mD.T * r * mD
+
+
+class SimplePetroRegularization(BaseComboRegularization):
+
+    def __init__(
+        self, mesh, GMmref, GMmodel = None,
+        alpha_s=1.0, alpha_x=1.0, alpha_y=1.0, alpha_z=1.0,
+        **kwargs
+    ):
+        self.GMmref = GMmref
+        Utils.order_clusters_GM_weight(self.GMmref)
+        self._GMmodel = GMmodel
+
+        objfcts = [
+            SimplePetroSmallness(GMmodel=self.GMmodel, mesh = mesh, **kwargs),
+            SimpleSmoothDeriv(mesh=mesh, orientation='x', **kwargs),
+        ]
+
+        if mesh.dim > 1:
+            objfcts += [
+                SimpleSmoothDeriv(mesh=mesh, orientation='y', **kwargs),
+            ]
+
+        if mesh.dim > 2:
+            objfcts += [
+                SimpleSmoothDeriv(mesh=mesh, orientation='z', **kwargs),
+            ]
+
+        super(SimplePetroRegularization, self).__init__(
+            mesh,
+            alpha_s=alpha_s, alpha_x=alpha_x, alpha_y=alpha_y, alpha_z=alpha_z,
             objfcts=objfcts, **kwargs)
 
         #Utils.setKwargs(self, **kwargs)
