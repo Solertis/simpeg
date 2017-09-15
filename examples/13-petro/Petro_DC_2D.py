@@ -110,15 +110,15 @@ dmis = DataMisfit.l2_DataMisfit(survey)
 regT = Regularization.Simple(mesh,  indActive=actind)
 
 # Personal preference for this solver with a Jacobi preconditioner
-opt = Optimization.ProjectedGNCG(maxIter=1, lower=-10, upper=10,
-                                  maxIterLS=20, maxIterCG=10, tolCG=1e-4)
+opt = Optimization.ProjectedGNCG(maxIter=20, lower=-10, upper=10,
+                                  maxIterLS=20, maxIterCG=30, tolCG=1e-4)
 
 opt.remember('xc')
 invProb = InvProblem.BaseInvProblem(dmis,  regT,  opt)
 
 beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e+1)
 betaSched = Directives.BetaSchedule(coolingFactor=2.,  coolingRate=3)
-updateWr = Directives.Update_DC_Wr(wrType='distanceW', changeMref=False, eps=5e-8)
+updateWr = Directives.Update_DC_Wr(wrType='distanceW', changeMref=False, eps=1e-7)
 
 inv = Inversion.BaseInversion(invProb,  directiveList=[beta, betaSched, updateWr])
 
@@ -139,7 +139,7 @@ Utils.order_clusters_GM_weight(clf)
 
 idenMap = Maps.IdentityMap(nP=m0.shape[0])
 reg = Regularization.PetroRegularization(GMmref=clf,  mesh=mesh, mapping=idenMap,
-                                         mref=m0, alpha_s=1., alpha_x=1.,  alpha_y=1.,
+                                         mref=m0, alpha_s=1e-4, alpha_x=1.,  alpha_y=1.,
                                          indActive=actind)
 reg.mrefInSmooth = True
 #gamma_petro = np.ones(clf.n_components)*1.
@@ -150,7 +150,7 @@ opt = Optimization.ProjectedGNCG(maxIter=20, lower=-10, upper=10,
                                   maxIterLS=20, maxIterCG=10, tolCG=1e-4)
 opt.remember('xc')
 
-invProb = InvProblem.BaseInvProblem(dmis,  reg,  opt, beta=1.)
+invProb = InvProblem.BaseInvProblem(dmis,  reg,  opt)
 
 beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e+1)
 petrodir = Directives.GaussianMixtureUpdateModel()
