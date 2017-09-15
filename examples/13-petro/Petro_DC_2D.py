@@ -94,7 +94,7 @@ expmap = Maps.ExpMap(mesh)
 mapactive = Maps.InjectActiveCells(mesh=mesh,  indActive=actind,
                                    valInactive=-5.)
 mapping = expmap*mapactive
-problem = DC.Problem3D_CC(mesh,  sigmaMap=mapping)
+problem = DC.Problem3D_CC(mesh,  sigmaMap=mapping, storeJ=True)
 problem.pair(survey)
 problem.Solver = PardisoSolver
 
@@ -107,15 +107,20 @@ survey.makeSyntheticData(mtrue[actind], std=0.05, force=True);
 #####################
 m0 = np.median(ln_sigback)*np.ones(mapping.nP)
 dmis = DataMisfit.l2_DataMisfit(survey)
-regT = Regularization.Tikhonov(mesh,  indActive=actind)
-opt = Optimization.InexactGaussNewton(maxIter=0,  tolX=1e-6)
+regT = Regularization.Simple(mesh,  indActive=actind)
+
+# Personal preference for this solver with a Jacobi preconditioner
+opt = Optimization.ProjectedGNCG(maxIter=1, lower=-10, upper=10,
+                                  maxIterLS=20, maxIterCG=10, tolCG=1e-4)
+
 opt.remember('xc')
 invProb = InvProblem.BaseInvProblem(dmis,  regT,  opt)
 
-beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e-3)
-betaSched = Directives.BetaSchedule(coolingFactor=5.,  coolingRate=5)
+beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e+1)
+betaSched = Directives.BetaSchedule(coolingFactor=2.,  coolingRate=3)
+updateWr = Directives.Update_DC_Wr(wrType='distanceW', changeMref=False, eps=5e-8)
 
-inv = Inversion.BaseInversion(invProb,  directiveList=[beta,  betaSched])
+inv = Inversion.BaseInversion(invProb,  directiveList=[beta, betaSched, updateWr])
 
 mnormal = inv.run(m0)
 
@@ -132,26 +137,29 @@ clf = GaussianMixture(n_components=n,  covariance_type='tied')
 clf.fit(mtrue[actind].reshape(-1, 1))
 Utils.order_clusters_GM_weight(clf)
 
-reg = Regularization.PetroRegularization(GMmref=clf,  mesh=mesh,
-                                         mref=m0, alpha_s=1e-3, alpha_x=1.,  alpha_y=1.,
+idenMap = Maps.IdentityMap(nP=m0.shape[0])
+reg = Regularization.PetroRegularization(GMmref=clf,  mesh=mesh, mapping=idenMap,
+                                         mref=m0, alpha_s=1., alpha_x=1.,  alpha_y=1.,
                                          indActive=actind)
 reg.mrefInSmooth = True
 #gamma_petro = np.ones(clf.n_components)*1.
 gamma_petro = np.r_[1.,1.,2.]
 reg.gamma = gamma_petro
 
-opt = Optimization.InexactGaussNewton(maxIter=20, tolX=1e-6)
+opt = Optimization.ProjectedGNCG(maxIter=20, lower=-10, upper=10,
+                                  maxIterLS=20, maxIterCG=10, tolCG=1e-4)
 opt.remember('xc')
 
-invProb = InvProblem.BaseInvProblem(dmis,  reg,  opt)
+invProb = InvProblem.BaseInvProblem(dmis,  reg,  opt, beta=1.)
 
-beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e-1)
+beta = Directives.BetaEstimate_ByEig(beta0_ratio=1e+1)
 petrodir = Directives.GaussianMixtureUpdateModel()
 
-betaSched = Directives.BetaSchedule(coolingFactor=1.,  coolingRate=1)
-
+betaSched = Directives.BetaSchedule(coolingFactor=2.,  coolingRate=3)
+updateWr = Directives.Update_DC_Wr(wrType='distanceW', changeMref=False, eps=5e-8)
 inv = Inversion.BaseInversion(invProb,
-                              directiveList=[beta,  betaSched,  petrodir])
+                              directiveList=[beta,  betaSched,  petrodir, updateWr])
+
 
 mcluster = inv.run(m0)
 

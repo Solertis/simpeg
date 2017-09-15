@@ -222,7 +222,7 @@ class BetaEstimate_ByEig(InversionDirective):
         f = self.invProb.getFields(m, store=True, deleteWarmstart=False)
 
         x0 = np.random.rand(m.shape[0])
-        t = x0.dot(self.dmisfit.deriv2(m, x0, f=f))
+        t = x0.dot(self.dmisfit.deriv2(m, x0, f=[f]))
         b = x0.dot(self.reg.deriv2(m, v=x0))
         self.beta0 = self.beta0_ratio*(t/b)
 
@@ -1133,16 +1133,16 @@ class Update_DC_Wr(InversionDirective):
         Update the sensitivity wegithing for the DC2D problem
     """
 
-    wrType = 'distanceW'
+    wrType = 'sensitivityW'
     changeMref = False
-    eps = 0.
+    eps = 1e-8
 
     def initialize(self):
 
         m = self.invProb.model
         Jmat = self.prob[0].getJ(m, self.prob[0].fields(m))
 
-        if self.wrType == 'distanceW':
+        if self.wrType == 'sensitivityW':
             wr = np.sum((Jmat)**2., axis=0)**0.5+self.eps
             wr = wr/wr.max()
             # for reg in self.reg.objfcts:
@@ -1174,7 +1174,7 @@ class Update_DC_Wr(InversionDirective):
 
         wr = np.sum((Jmat)**2.+self.eps**2., axis=0)**0.5
         wr = wr/wr.max()
-        if self.wrType == 'distanceW':
+        if self.wrType == 'sensitivityW':
             # for reg in self.reg.objfcts:
             self.reg.objfcts[0].cell_weights = self.reg.mapping * wr
 

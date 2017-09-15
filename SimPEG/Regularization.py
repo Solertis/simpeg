@@ -1681,19 +1681,19 @@ class PetroRegularization(BaseComboRegularization):
         objfcts = [
             PetroSmallness(GMmodel=self.GMmodel, mesh = mesh, **kwargs),
             SmoothDeriv(mesh=mesh, orientation='x', **kwargs),
-            SmoothDeriv2(mesh=mesh, orientation='x', **kwargs),
+            # SmoothDeriv2(mesh=mesh, orientation='x', **kwargs),
         ]
 
         if mesh.dim > 1:
             objfcts += [
                 SmoothDeriv(mesh=mesh, orientation='y', **kwargs),
-                SmoothDeriv2(mesh=mesh, orientation='y', **kwargs)
+                # SmoothDeriv2(mesh=mesh, orientation='y', **kwargs)
             ]
 
         if mesh.dim > 2:
             objfcts += [
                 SmoothDeriv(mesh=mesh, orientation='z', **kwargs),
-                SmoothDeriv2(mesh=mesh, orientation='z', **kwargs)
+                # SmoothDeriv2(mesh=mesh, orientation='z', **kwargs)
             ]
 
         super(PetroRegularization, self).__init__(
