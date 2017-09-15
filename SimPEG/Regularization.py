@@ -1864,25 +1864,25 @@ class SimplePetroRegularization(BaseComboRegularization):
     def membership(self,m):
         return self.objfcts[0].membership(m)
 
-    @properties.observer('space')
-    def _mirror_space_to_objfcts(self, change):
-        for objfct in self.objfcts:
-            objfct.space = change['value']
+#     @properties.observer('space')
+#     def _mirror_space_to_objfcts(self, change):
+#         for objfct in self.objfcts:
+#             objfct.space = change['value']
 
-    @properties.observer('scale')
-    def _mirror_scale_to_objfcts(self, change):
-        for objfct in self.objfcts:
-            objfct.scale = change['value']
+#     @properties.observer('scale')
+#     def _mirror_scale_to_objfcts(self, change):
+#         for objfct in self.objfcts:
+#             objfct.scale = change['value']
 
 
-def coterminal(theta):
-    """ Compute coterminal angle so that [-pi < theta < pi]"""
+# def coterminal(theta):
+#     """ Compute coterminal angle so that [-pi < theta < pi]"""
 
-    sub = theta[np.abs(theta) >= np.pi]
-    sub = -np.sign(sub) * (2*np.pi-np.abs(sub))
+#     sub = theta[np.abs(theta) >= np.pi]
+#     sub = -np.sign(sub) * (2*np.pi-np.abs(sub))
 
-    theta[np.abs(theta) >= np.pi] = sub
+#     theta[np.abs(theta) >= np.pi] = sub
 
-    return theta
+#     return theta
 
 
